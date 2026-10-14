@@ -43,6 +43,11 @@ h2{font-size:1.05rem;margin:0 0 4px;display:flex;align-items:center;gap:8px}
 .day.sel{background:linear-gradient(135deg,var(--pink),var(--pink2));color:#fff;border-color:transparent;
   box-shadow:0 8px 20px #ff7aa855;transform:scale(1.05)}
 .blank{visibility:hidden}
+.calbtns{display:grid;gap:10px}
+.calbtn{display:block;text-align:center;text-decoration:none;padding:13px;border-radius:14px;border:1px solid var(--line);
+  background:var(--soft);color:var(--text);font:600 .92rem 'Poppins',sans-serif;cursor:pointer;transition:.15s}
+.calbtn:hover{border-color:var(--pink);color:var(--pink)}
+.calbtn.main{border:2px solid var(--pink)}
 .calnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .nav{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--soft);color:var(--text);cursor:pointer;font-size:1.3rem;line-height:1}
 .nav:hover:not(:disabled){border-color:var(--pink);color:var(--pink)}
@@ -91,6 +96,12 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:10px}
   </section>
 
   <section class="card">
+    <h2>⏰ Que horas?</h2>
+    <p class="hint">Escolha o horário (opcional). Sem horário, o evento fica marcado o dia todo.</p>
+    <input type="time" id="time">
+  </section>
+
+  <section class="card">
     <h2>📍 Onde você quer ir?</h2>
     <p class="hint">Pode colocar mais de uma ideia de lugar, se quiser!</p>
     <div id="places"></div>
@@ -105,6 +116,14 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:10px}
 
   <p class="err" id="err"></p>
   <a class="send" id="send" href="#" target="_blank" rel="noopener noreferrer">Enviar pelo WhatsApp 💬</a>
+  <section class="card" id="cal" style="margin-top:18px">
+    <h2>📅 Salvar no calendário</h2>
+    <p class="hint">Crie o compromisso na agenda para não esquecer! Escolha o seu celular:</p>
+    <div class="calbtns">
+      <button type="button" class="calbtn" id="ics">🍎 Calendário do iPhone</button>
+      <a class="calbtn" id="gcal" href="#" target="_blank" rel="noopener noreferrer">🤖 Google Agenda (Android)</a>
+    </div>
+  </section>
   <section class="card" id="fb" hidden style="margin-top:18px">
     <h2>Não abriu o WhatsApp?</h2>
     <p class="hint">Copie a mensagem abaixo e mande para o número do seu amor 💕</p>
@@ -175,7 +194,7 @@ $("send").addEventListener("click",e=>{
   const dataTxt=dt.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"});
   const note=$("note").value.trim();
   let msg=`Oi, amor! Já escolhi como vamos comemorar nosso aniversário de ${MESES[M]}!\n\n`+
-    `*Dia:* ${dataTxt}\n`+
+    `*Dia:* ${dataTxt}\n`+($("time").value?`*Horário:* ${$("time").value}\n`:"")+
     `*${places.length>1?"Lugares":"Lugar"}:*\n`+places.map((p,i)=>places.length>1?`${i+1}. ${p}`:p).join("\n");
   if(note)msg+=`\n\n*Obs.:* ${note}`;
   msg+=`\n\nTe amo!`;
@@ -189,6 +208,55 @@ $("copy").onclick=async()=>{
   catch(_){t.select();document.execCommand("copy");}
   $("copy").textContent="Copiado! ✅";
 };
+
+
+// Calendário: .ics (iPhone/Apple) e Google Agenda (Android)
+const p2=n=>String(n).padStart(2,"0");
+const ymd=d=>`${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}`;
+function evento(){
+  const places=[...$("places").querySelectorAll("input")].map(i=>i.value.trim()).filter(Boolean);
+  if(!selected){$("err").textContent="Escolha o dia da comemoração 💕";return null;}
+  if(!places.length){$("err").textContent="Conte pelo menos um lugar onde quer ir 📍";return null;}
+  $("err").textContent="";
+  const note=$("note").value.trim();
+  const end=new Date(selected.getFullYear(),selected.getMonth(),selected.getDate()+1);
+  let desc=(places.length>1?"Opções de lugar:\n":"Lugar:\n")+places.map(x=>"- "+x).join("\n");
+  if(note)desc+="\n\nObs.: "+note;
+  const hora=$("time").value;
+  let start=ymd(selected), fim=ymd(end), timed=false;
+  if(hora){
+    const [h,mi]=hora.split(":").map(Number);
+    const st=new Date(selected.getFullYear(),selected.getMonth(),selected.getDate(),h,mi);
+    const en=new Date(st.getTime()+2*3600*1000); // duração padrão: 2h
+    const f=d=>ymd(d)+"T"+p2(d.getHours())+p2(d.getMinutes())+"00";
+    start=f(st);fim=f(en);timed=true;
+    desc="Horário: "+hora+"\n\n"+desc;
+  }
+  return {title:`Aniversário de namoro - ${MESES[M]}`,where:places.join(" / "),desc,start,end:fim,timed};
+}
+$("gcal").addEventListener("click",e=>{
+  const v=evento(); if(!v){e.preventDefault();return;}
+  $("gcal").href="https://calendar.google.com/calendar/render?action=TEMPLATE&text="+encodeURIComponent(v.title)
+    +"&dates="+v.start+"/"+v.end+"&details="+encodeURIComponent(v.desc)+"&location="+encodeURIComponent(v.where);
+});
+$("ics").onclick=()=>{
+  const v=evento(); if(!v)return;
+  const esc=t=>t.replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n");
+  const stamp=new Date().toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
+  const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Aniversario Namoro//PT-BR","CALSCALE:GREGORIAN","BEGIN:VEVENT",
+    "UID:"+Date.now()+"@aniversario-namoro","DTSTAMP:"+stamp,(v.timed?"DTSTART:":"DTSTART;VALUE=DATE:")+v.start,(v.timed?"DTEND:":"DTEND;VALUE=DATE:")+v.end,
+    "SUMMARY:"+esc(v.title),"LOCATION:"+esc(v.where),"DESCRIPTION:"+esc(v.desc),
+    "BEGIN:VALARM","ACTION:DISPLAY","DESCRIPTION:"+esc(v.title),"TRIGGER:"+(v.timed?"-PT2H":"-PT15H"),"END:VALARM",
+    "END:VEVENT","END:VCALENDAR"].join("\r\n");
+  const url=URL.createObjectURL(new Blob([ics],{type:"text/calendar;charset=utf-8"}));
+  const a=document.createElement("a");
+  a.href=url;a.download="aniversario-namoro.ics";
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+};
+// Destaca primeiro o botão do aparelho de quem está usando
+if(/iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent)){$("ics").classList.add("main");}
+else{$("gcal").classList.add("main");$("gcal").style.order=-1;}
 
 // Corações flutuando
 const H=$("hearts");
